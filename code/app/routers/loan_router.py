@@ -42,7 +42,7 @@ async def apply_endpoint(payload: LoanApplyRequest, current = Depends(get_curren
             emi_amount=doc["emi_amount"],
             status=doc["status"],
             applied_at=doc["applied_at"],
-            outstanding_principal=doc["outstanding_principal"],
+            remaining_balance=doc["remaining_balance"],
             emi_schedule=doc.get("emi_schedule")
         )
     except Exception as e:
@@ -97,8 +97,7 @@ async def repay_endpoint(loan_id: str, amount: float):
 async def reject_endpoint(
     loan_id: str,
     body: RejectRequest,   
-    current = Depends(require_role("ADMIN"))
-):
+    current = Depends(require_role("ADMIN"))):
     try:
         # Ensure only ADMIN can reject
         if current.get("role") != "ADMIN":

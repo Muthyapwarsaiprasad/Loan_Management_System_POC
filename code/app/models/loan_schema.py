@@ -19,7 +19,7 @@ class LoanResponse(BaseModel):
     emi_amount: float
     status: str
     applied_at: datetime
-    outstanding_principal: float
+    remaining_balance: float
     emi_schedule: Optional[List[dict]] = None
 
 class RejectRequest(BaseModel):

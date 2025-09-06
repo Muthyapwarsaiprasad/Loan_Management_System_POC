@@ -19,15 +19,22 @@ async def apply_loan(payload: dict) -> dict:
     # -------- check role ------------
     if payload.get("role") in "BORROWER":
 
+        # Prevent multiple loans of the same type unless closed/rejected
         active_loan = await loans_col.find_one(
-            {"customer_id": payload["customer_id"], "status": {"$ne": "CLOSED"}}
+            {
+                "customer_id": payload["customer_id"],
+                "loan_type": payload["loan_type"],
+                "status": {"$nin": ["CLOSED", "REJECTED"]},
+            }
         )
+
         if active_loan:
             raise HTTPException(
                 status_code=400,
-                detail="You already have an active loan. Cannot apply until the current loan is CLOSED."
+                detail=f"You already have an active {payload['loan_type']} loan. "
+                    f"Please close it before applying for another {payload['loan_type']} loan."
             )
-        
+      
         loan_type = payload.get("loan_type")
         annual_rate = payload.get("annual_rate") or DEFAULT_RATES.get(loan_type, 9.0)
 
@@ -54,7 +61,7 @@ async def apply_loan(payload: dict) -> dict:
             "status": "APPLIED",
             "applied_at": datetime.utcnow(),
             "emi_amount": emi,
-            "outstanding_principal": float(payload["principal"]),
+            "remaining_balance": float(payload["principal"]),
             "emi_schedule": schedule,
         }
 
@@ -146,12 +153,12 @@ async def record_repayment(loan_id: str, amount: float, paid_on: datetime = None
         raise LoanAlreadyStatus(f"Loan {loan_id} is CLOSED") # type: ignore
     if loan["status"] not in ("DISBURSED",):
         raise InvalidLoanOperation("Only DISBURSED loans accept repayments")
-    outstanding = float(loan.get("outstanding_principal", 0.0))
+    outstanding = float(loan.get("remaining_balance", 0.0))
     payment = round(float(amount), 2)
     new_outstanding = max(0.0, round(outstanding - payment, 2))
     rep = {"loan_id": loan["_id"], "amount": payment, "paid_on": paid_on, "remaining_balance": new_outstanding}
     await repayments_col.insert_one(rep)
-    await loans_col.update_one({"_id": loan["_id"]}, {"$set": {"outstanding_principal": new_outstanding}})
+    await loans_col.update_one({"_id": loan["_id"]}, {"$set": {"remaining_balance": new_outstanding}})
     if new_outstanding == 0.0:
         await loans_col.update_one({"_id": loan["_id"]}, {"$set": {"status": "CLOSED", "closed_at": datetime.utcnow()}})
         logger.info(f"Loan {loan["_id"]} is Closed , outstanding is {new_outstanding} ")
@@ -235,7 +242,7 @@ async def get_all_applied_loans():
                 "emi_amount": doc.get("emi_amount"),
                 "status": doc.get("status"),
                 "applied_at": doc.get("applied_at"),
-                "outstanding_principal": doc.get("outstanding_principal")}
+                "remaining_balance": doc.get("remaining_balance")}
             }
         loans.append(loan)
     return loans

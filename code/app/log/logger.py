@@ -1,7 +1,7 @@
 import logging
 import os
 
-LOG_DIR = "log_data"
+LOG_DIR = "data/log_data"
 LOG_FILE = os.path.join(LOG_DIR, "data_log.log")
 
 def get_logger(name):
